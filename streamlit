@@ -1,0 +1,143 @@
+import streamlit as st
+import requests
+
+API_URL = "http://127.0.0.1:9000"
+
+st.set_page_config(page_title="Job Execution Logs",
+layout = "centered")
+
+st.title("Job Execution Log Dashboard")
+
+
+st.subheader("View Logs")
+
+if st.button("Load Logs"):
+	response = requests.get(f"{API_URL}/logs")
+	if response.status_code == 200:
+		logs = response.json()
+		if logs:
+			st.table(logs)
+		else:
+			st.info("No logs found")
+	else:
+		st.error("Failed to fetch logs")
+
+
+st.subheader("Add New Log")
+
+entry_name = st.text_input("Entry Name")
+employee = st.text_input("Employee")
+status = st.selectbox(
+	"Status",
+	["COMPLETED","PARTIALLY COMPLETED","ERROR"]
+)
+
+if st.button("Submit Log"):
+	payload = {
+		"entry_name":entry_name,
+		"employee":employee,
+		"status":status,
+	}
+
+	response = requests.post(
+		f"{API_URL}/logs/quick",
+		json=payload,
+		timeout=5
+	)
+
+	if response.status_code == 201:
+		st.success("Log added successfully")
+		st.json(response.json())
+	else:
+		st.error(f"Error {response.status_code}")
+		st.error(response.text)
+
+
+st.subheader("Delete a log")
+
+log_id = st.number_input("Enter Log ID to Delete",
+	min_value=1,
+	step=1
+)
+
+if st.button("Delete this Log"):
+	response = requests.delete(
+		f"{API_URL}/logs/{int(log_id)}"
+	)
+
+	if response.status_code == 204:
+		st.success(f"Log{int(log_id)} deleted")
+	else:
+		st.error(response.text)
+
+st.subheader("Delete all logs")
+
+confirm = st.checkbox("i am fully aware of deleting all logs")
+
+if confirm and st.button("Delete ALL Logs"):
+	response = requests.delete(
+		f"{API_URL}/logs"
+	)
+
+	if response.status_code == 204:
+		st.success("all logs deleted")
+	else:
+		st.error(response.text)
+
+st.subheader("Update a log")
+
+update_id = st.number_input("Enter Log ID to Update",
+	min_value=1,
+	step=1
+)
+
+new_entry_name = st.text_input("New Entry Name",
+key= "update_entry")
+new_employee = st.text_input("New Entry Name",
+key="update_employee")
+new_status = st.selectbox(
+	"New Status",
+	["COMPLETED","PARTIALLY COMPLETED","ERROR"],
+	key = "update_status")
+
+
+if st.button("Update Log"):
+	payload = {
+		"entry_name": new_entry_name,
+		"employee": new_employee,
+		"status":new_status
+	}
+	response = requests.put(
+		f"{API_URL}/logs/int(update_id)",
+		json=payload
+	)
+
+	if response.status_code == 200:
+		st.success("Log updated successfully")
+		st.json(response.json())
+	else:
+		st.error(response.text)
+
+
+
+st.subheader("Run Job Summary Sync (API X)")
+
+if st.button("Run SYNC JOB SUMMARY"):
+	try:
+		response = requests.post("http://127.0.0.1:8001/x/sync-job-summary")
+
+		if response.status_code == 200:
+			data = response.json()
+
+			st.markdown("### Processing steps")
+			for step in data.get("steps",[]):
+				st.write(f"- {step}")
+	
+			st.markdown("### Final Result")
+			st.table(data["result"])
+		else:
+			st.error(f"API X failed ({response.status_code})")
+			st.text(response.text)
+
+	except requests.exceptions.ConnectionErrors:
+		st.error("API X is not running on port 8001")
