@@ -1,0 +1,62 @@
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+import requests
+from database import get_db
+from models import JobExecutionLog
+
+app = FastAPI()
+
+API_Y_URL = "http://127.0.0,1:9000/job-summary"
+
+
+@app.post("/x/sync-job-summary")
+def sync_job_summary(db:Session = Depends(get_db)):
+	steps = []
+	steps.append("connecting to database")
+
+	logs = db.query(JobExecutionLog).all()
+	steps.append(f"Fetched {len(logs)} job logs")
+
+	if not logs:
+		steps.append("No logs found. Existing.")
+		return {
+			"steps":steps,
+			"result":[] 
+		}
+
+	summary = {}
+	steps.append("agregating jobs by job name")
+
+	for row in logs:
+		job = row.entry_name
+		if job not in summary:
+			summary[job] = {"total":0,"failed": 0}
+
+		summary[job]["total"] += 1
+
+		if row.status == "ERROR":
+			summary[job]["failed"] += 1
+
+	steps.append("calculating success rates")
+
+	payload = []
+	for job, stats in summary.items():
+		if stats["total"]>0:
+			success_rate=round(((stats["total"] - stats["failed"]) / stats["total"])*100,2)
+		else:
+			success_rate = 0.0	
+		payload.append({
+			"job_name":job,
+			"total_runs":stats["total"],
+			"failed_runs":stats["failed"],
+			"success_rate" :success_rate})
+
+	steps.append("posting summary to API-Y")
+
+	requests.post(API_Y_URL, json=payload)
+
+	steps.append("Processing completed successfully")
+	
+	return {"steps": steps,
+		"result": payload
+	}
